@@ -17,16 +17,16 @@ type ListViewColumn = typeof DEFAULT_LIST_VIEW_COLUMNS[number]
 /** 默认的 List 视图列宽度配置 */
 const DEFAULT_LIST_COLUMN_WIDTHS: Record<string, string> = {
   status: '76px',
-  region: '40px',
+  region: '32px',
   name: 'minmax(200px, 1fr)',
-  tags: '200px',
-  uptime: 'minmax(180px, 0.6fr)',
-  os: '120px',
-  cpu: '180px',
-  mem: '180px',
-  disk: '180px',
-  traffic: '180px',
-  rate: '140px',
+  uptime: 'minmax(100px, 0.4fr)',
+  tags: 'minmax(200px, 0.6fr)',
+  os: '250px',
+  cpu: '160px',
+  mem: '160px',
+  disk: '160px',
+  traffic: '160px',
+  rate: '80px',
 }
 
 /** 默认的字节精度配置 */

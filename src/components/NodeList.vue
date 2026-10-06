@@ -4,6 +4,7 @@ import { NBadge, NButton, NIcon, NList, NListItem, NModal, NProgress, NTag, NTex
 import { computed, onMounted, ref } from 'vue'
 import PingChart from '@/components/PingChart.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
+import { estimateListGridMinWidth } from '@/constants/nodeListTable'
 import { useNodeListTable } from '@/composables/useNodeListTable'
 import { useNodeProviderMetadata } from '@/composables/useNodeProviderMetadata'
 import { useAppStore } from '@/stores/app'
@@ -307,7 +308,11 @@ function getColumnStyle(col: string): Record<string, string> {
   }
 }
 
-const { listTableStyle } = useNodeListTable()
+const tableMinWidth = computed(() =>
+  estimateListGridMinWidth(gridColumns.value, appStore.listColumnWidths, appStore.listColumnGap),
+)
+
+const { listTableStyle } = useNodeListTable(tableMinWidth)
 
 // 是否启用背景模糊
 const hasBackgroundBlur = computed(() => {
@@ -582,17 +587,18 @@ const columnTitles: Record<string, string> = {
 
 <template>
   <div class="node-list-table" :style="listTableStyle">
-    <NList
-      hoverable
-      clickable
-      bordered
-      class="node-list-table__scroll app-scrollbar min-w-fit w-full"
-      :class="[
-        { 'light-list-contrast': appStore.lightCardContrast && !appStore.isDark },
-        { 'glass-list-enabled': hasBackgroundBlur },
-        listBlurClass,
-      ]"
-    >
+    <div class="node-list-table__scroll app-scrollbar">
+      <NList
+        hoverable
+        clickable
+        bordered
+        class="node-list-table__surface"
+        :class="[
+          { 'light-list-contrast': appStore.lightCardContrast && !appStore.isDark },
+          { 'glass-list-enabled': hasBackgroundBlur },
+          listBlurClass,
+        ]"
+      >
       <template #header>
         <div class="node-list-header" :style="gridStyle">
           <template v-for="col in gridColumns" :key="col">
@@ -909,7 +915,8 @@ const columnTitles: Record<string, string> = {
           </div>
         </div>
       </NListItem>
-    </NList>
+      </NList>
+    </div>
 
     <!-- 延迟图表弹窗 -->
     <NModal
@@ -930,7 +937,7 @@ const columnTitles: Record<string, string> = {
   position: absolute;
   inset: 0;
   z-index: 2;
-  padding: 8px 16px;
+  padding: 0;
   pointer-events: none;
   transition: opacity 200ms ease;
 }
@@ -941,7 +948,10 @@ const columnTitles: Record<string, string> = {
 
 .node-offline-overlay__grid {
   display: grid;
+  box-sizing: border-box;
+  width: 100%;
   height: 100%;
+  padding: 8px 16px;
   align-items: stretch;
 }
 

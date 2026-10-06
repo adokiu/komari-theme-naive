@@ -5,6 +5,7 @@ import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 import { computed, onMounted, ref } from 'vue'
 import { useNodeProviderMetadata } from '@/composables/useNodeProviderMetadata'
 import { useNodeListTable } from '@/composables/useNodeListTable'
+import { estimateMinWidthFromGridTemplate } from '@/constants/nodeListTable'
 import { useAppStore } from '@/stores/app'
 import * as financeHelper from '@/utils/financeHelper'
 import { hasFreeNodeTag, parseBandwidthMbpsFromTags } from '@/utils/tagHelper'
@@ -53,6 +54,10 @@ const gridStyle = computed(() => ({
   gridTemplateColumns: `${appStore.listColumnWidths.status || '76px'} ${appStore.listColumnWidths.region || '32px'} minmax(200px, 1fr) minmax(120px, 0.85fr) minmax(200px, 1fr) 108px 108px 108px 108px 108px`,
   gap: appStore.listColumnGap || '12px',
 }))
+
+const tableMinWidth = computed(() =>
+  estimateMinWidthFromGridTemplate(gridStyle.value.gridTemplateColumns, gridStyle.value.gap),
+)
 
 function getFlagSrc(region: string): string {
   return `/images/flags/${getRegionCode(region)}.svg`
@@ -235,7 +240,7 @@ function sortMark(key: SortKey): string {
   return sortDir.value === 1 ? ' ↑' : ' ↓'
 }
 
-const { listTableStyle } = useNodeListTable()
+const { listTableStyle } = useNodeListTable(tableMinWidth)
 
 const cardBlurClass = listBlurClass
 
@@ -267,13 +272,14 @@ const listSurfaceClass = computed(() => [
     </NCard>
 
     <div class="node-list-table" :style="listTableStyle">
-      <NList
-        hoverable
-        clickable
-        bordered
-        class="node-list-table__scroll app-scrollbar min-w-fit w-full"
-        :class="listSurfaceClass"
-      >
+      <div class="node-list-table__scroll app-scrollbar">
+        <NList
+          hoverable
+          clickable
+          bordered
+          class="node-list-table__surface"
+          :class="listSurfaceClass"
+        >
         <template #header>
           <div class="node-list-header panel-list-grid" :style="gridStyle">
             <div class="node-list-header__status">
@@ -372,15 +378,15 @@ const listSurfaceClass = computed(() => [
           </NText>
           </div>
         </NListItem>
-      </NList>
+        </NList>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .panel-list-grid {
-  width: 100%;
-  min-width: 980px;
+  align-items: center;
 }
 
 .light-general-contrast {

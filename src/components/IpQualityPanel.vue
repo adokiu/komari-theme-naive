@@ -6,6 +6,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import NodeListNameCell from '@/components/NodeListNameCell.vue'
 import { useNodeListTable } from '@/composables/useNodeListTable'
+import { estimateMinWidthFromGridTemplate } from '@/constants/nodeListTable'
 import { useAppStore } from '@/stores/app'
 import {
   aiToolSuitabilityForNode,
@@ -30,7 +31,6 @@ const props = defineProps<{
 
 const appStore = useAppStore()
 const router = useRouter()
-const { listTableStyle } = useNodeListTable()
 const refreshing = ref(false)
 
 interface NodeIpQuality {
@@ -80,6 +80,12 @@ const gridStyle = computed(() => ({
   gridTemplateColumns: `${appStore.listColumnWidths.status || '76px'} ${appStore.listColumnWidths.region || '32px'} minmax(160px, 1fr) minmax(140px, 0.9fr) minmax(88px, 0.42fr) minmax(120px, 0.55fr) minmax(96px, 0.48fr) minmax(140px, 0.85fr) minmax(88px, 0.42fr)`,
   gap: appStore.listColumnGap || '12px',
 }))
+
+const tableMinWidth = computed(() =>
+  estimateMinWidthFromGridTemplate(gridStyle.value.gridTemplateColumns, gridStyle.value.gap),
+)
+
+const { listTableStyle } = useNodeListTable(tableMinWidth)
 
 interface IpQualityRow {
   key: string
@@ -240,15 +246,16 @@ watch(nodeListFingerprint, () => {
       </div>
     </NCard>
 
-    <div class="node-list-table ip-quality-panel__table" :style="listTableStyle">
-      <div class="ip-quality-panel__body">
-        <NList
-          hoverable
-          clickable
-          bordered
-          class="node-list-table__scroll app-scrollbar min-w-fit w-full"
-          :class="listSurfaceClass"
-        >
+    <div class="node-list-table ip-quality-panel__table min-w-0 max-w-full" :style="listTableStyle">
+      <div class="ip-quality-panel__body min-w-0 max-w-full">
+        <div class="node-list-table__scroll app-scrollbar">
+          <NList
+            hoverable
+            clickable
+            bordered
+            class="node-list-table__surface"
+            :class="listSurfaceClass"
+          >
           <template #header>
             <div class="node-list-header ip-quality-grid" :style="gridStyle">
               <div class="node-list-header__status">
@@ -476,7 +483,8 @@ watch(nodeListFingerprint, () => {
               </div>
             </div>
           </NListItem>
-        </NList>
+          </NList>
+        </div>
       </div>
     </div>
   </div>
@@ -490,7 +498,6 @@ watch(nodeListFingerprint, () => {
 }
 
 .ip-quality-grid {
-  width: 100%;
   align-items: center;
 }
 

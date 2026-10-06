@@ -78,7 +78,7 @@ const showFiling = computed(() => showIcp.value || showPolice.value)
             Theme by
           </NText>
           <a
-            href="https://github.com/adokiu/komari-theme-naive"
+            href="https://github.com/aDokiu/komari-naive-neko"
             target="_blank"
             rel="noopener noreferrer"
             class="text-decoration-none transition-opacity hover:opacity-80"

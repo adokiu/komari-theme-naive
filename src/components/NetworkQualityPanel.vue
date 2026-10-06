@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import NodeListNameCell from '@/components/NodeListNameCell.vue'
 import PingTaskQualityCell from '@/components/PingTaskQualityCell.vue'
 import { useNodeListTable } from '@/composables/useNodeListTable'
+import { estimateMinWidthFromGridTemplate } from '@/constants/nodeListTable'
 import { useNodesPingQuality } from '@/composables/useNodesPingQuality'
 import { useAppStore } from '@/stores/app'
 import { getPingQualityPresentation, getPingQualityTagStyle, type PingQualityLevel } from '@/utils/pingSummary'
@@ -177,12 +178,11 @@ const gridStyle = computed(() => ({
   gap: columnGap.value,
 }))
 
-const tableMinWidth = computed(() => {
-  const taskCount = displayTaskColumns.value.length
-  return `${744 + taskCount * 116 + 88}px`
-})
+const tableMinWidth = computed(() =>
+  estimateMinWidthFromGridTemplate(gridTemplateColumns.value, columnGap.value),
+)
 
-const { listTableStyle } = useNodeListTable()
+const { listTableStyle } = useNodeListTable(tableMinWidth)
 
 function getFlagSrc(region: string): string {
   return `/images/flags/${getRegionCode(region)}.svg`
@@ -254,17 +254,18 @@ function qualityTagStyle(level: PingQualityLevel) {
 
     <div v-else class="node-list-table network-quality-panel__table" :style="listTableStyle">
       <NSpin :show="showTableSpin" class="network-quality-panel__spin">
-        <NList
-          hoverable
-          clickable
-          bordered
-          class="node-list-table__scroll app-scrollbar min-w-fit w-full"
-          :class="listSurfaceClass"
-        >
+        <div class="node-list-table__scroll app-scrollbar">
+          <NList
+            hoverable
+            clickable
+            bordered
+            class="node-list-table__surface"
+            :class="listSurfaceClass"
+          >
         <template #header>
           <div
             class="node-list-header network-quality-grid"
-            :style="[gridStyle, { minWidth: tableMinWidth }]"
+            :style="gridStyle"
           >
             <div class="node-list-header__status">
               <NText :depth="3" class="text-xs">
@@ -310,7 +311,7 @@ function qualityTagStyle(level: PingQualityLevel) {
         >
           <div
             class="node-list-item network-quality-grid"
-            :style="[gridStyle, { minWidth: tableMinWidth }]"
+            :style="gridStyle"
           >
             <div class="node-list-item__status">
               <NTag v-if="appStore.listStatusStyle === 'tag'" :type="row.node.online ? 'success' : 'error'" size="small">
@@ -355,7 +356,8 @@ function qualityTagStyle(level: PingQualityLevel) {
             </div>
           </div>
         </NListItem>
-        </NList>
+          </NList>
+        </div>
       </NSpin>
     </div>
   </div>
@@ -373,7 +375,6 @@ function qualityTagStyle(level: PingQualityLevel) {
 }
 
 .network-quality-grid {
-  width: 100%;
   align-items: center;
 }
 

@@ -375,8 +375,11 @@ export function parseBandwidthMbpsFromTags(tags: string | undefined): number | n
     return null
 
   const value = Number(match[1])
+  if (!Number.isFinite(value) || value <= 0)
+    return null
+
   const unit = match[2]
-  if (!Number.isFinite(value) || value <= 0 || !unit)
+  if (!unit)
     return null
 
   return bandwidthValueToMbps(value, unit)

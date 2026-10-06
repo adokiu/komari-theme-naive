@@ -4,7 +4,7 @@
   "description": "Komari Naive 分支，含 IP 质量等扩展（aDokiu）",
   "version": "1.1.1",
   "author": "aDokiu",
-  "url": "https://github.com/adokiu/komari-theme-naive",
+  "url": "https://github.com/aDokiu/komari-naive-neko",
   "preview": "preview.png",
   "configuration": {
     "type": "managed",
@@ -31,7 +31,7 @@
       { "key": "listTagsStyle", "name": "标签显示样式", "type": "select", "default": "tag", "options": "tag,badge", "help": "List 视图中节点标签的显示样式：tag 为标签样式，badge 为徽章样式" },
       { "key": "listColumnGap", "name": "列间距", "type": "string", "default": "12px", "help": "List 视图各列之间的间距（如 12px、1rem）" },
       { "key": "listViewColumns", "name": "显示列", "type": "string", "default": "[\"status\",\"region\",\"name\",\"tags\",\"uptime\",\"os\",\"cpu\",\"mem\",\"disk\",\"traffic\"]", "help": "List 视图下显示的列，JSON 数组格式（ASN/厂商在节点名称下方；价格与自定义标签在 tags 列）" },
-      { "key": "listColumnWidths", "name": "列宽度配置", "type": "string", "default": "{\"status\":\"76px\",\"region\":\"32px\",\"name\":\"minmax(200px, 1fr)\",\"uptime\":\"minmax(180px, 0.6fr)\",\"tags\":\"minmax(220px, 0.6fr)\",\"os\":\"120px\",\"cpu\":\"180px\",\"mem\":\"180px\",\"disk\":\"180px\",\"traffic\":\"180px\"}", "help": "List 视图各列宽度配置，JSON 对象格式" },
+      { "key": "listColumnWidths", "name": "列宽度配置", "type": "string", "default": "{\"status\":\"76px\",\"region\":\"32px\",\"name\":\"minmax(200px, 1fr)\",\"uptime\":\"minmax(100px, 0.4fr)\",\"tags\":\"minmax(200px, 0.6fr)\",\"os\":\"250px\",\"cpu\":\"160px\",\"mem\":\"160px\",\"disk\":\"160px\",\"traffic\":\"160px\",\"rate\":\"80px\"}", "help": "List 视图各列宽度配置，JSON 对象格式" },
       { "key": "listColumnPadding", "name": "列内边距配置", "type": "string", "default": "{}", "help": "List 视图各列内边距配置，JSON 对象格式，格式参照 listColumnWidths" },
       { "key": "listColumnMargin", "name": "列外边距配置", "type": "string", "default": "{}", "help": "List 视图各列外边距配置，JSON 对象格式，格式参照 listColumnWidths" },
       { "name": "页面布局", "type": "title" },

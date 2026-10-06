@@ -264,7 +264,7 @@ function copyNodeInfo() {
 </script>
 
 <template>
-  <div class="home-view">
+  <div class="home-view min-w-0 max-w-full">
     <div v-if="appStore.connectionError" class="alert px-4">
       <NAlert type="error" title="RPC 服务错误" show-icon>
         连接服务器失败，请检查网络设置或刷新页面后再试。
@@ -278,7 +278,7 @@ function copyNodeInfo() {
     </div>
     <NodeGeneralCards />
     <NDivider class="my-0! px-4!" dashed />
-    <div class="node-info p-4 flex flex-col gap-4">
+    <div class="node-info p-4 flex flex-col gap-4 min-w-0 max-w-full">
       <div class="node-toolbar node-toolbar--aligned flex gap-2 items-center">
         <div class="node-toolbar__tabs min-w-0 max-w-[calc(100%-11.5rem)]">
           <div ref="groupTabsNavRef" class="group-filter-tabs" role="tablist">
@@ -385,7 +385,7 @@ function copyNodeInfo() {
       </div>
       <div class="nodes-stage">
         <Transition name="node-panel-switch" mode="out-in">
-          <div :key="nodePanelTransitionKey" class="nodes">
+          <div :key="nodePanelTransitionKey" class="nodes min-w-0 w-full max-w-full">
             <ProviderValuePanel
               v-if="showProviderValuePanel && nodeList.length !== 0"
               :nodes="nodeList"

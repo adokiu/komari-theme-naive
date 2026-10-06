@@ -5,7 +5,7 @@ import { NCard, NText } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import FinanceNodeRenewalTable, { type FinanceNodeTableRow } from '@/components/FinanceNodeRenewalTable.vue'
-import { useNodeListTable } from '@/composables/useNodeListTable'
+import { useNodeListSurface } from '@/composables/useNodeListSurface'
 import { useAppStore } from '@/stores/app'
 import * as financeHelper from '@/utils/financeHelper'
 import { getDaysUntilExpired, hasNoRenewAfterExpireTag, isFreeNode } from '@/utils/tagHelper'
@@ -18,6 +18,7 @@ const props = defineProps<{
 const appStore = useAppStore()
 const router = useRouter()
 const now = useNow({ interval: 60_000 })
+const { cardSurfaceClass, hasBackgroundBlur } = useNodeListSurface()
 
 const exchangeRates = ref(financeHelper.DEFAULT_EXCHANGE_RATES)
 const financeCurrency = ref(financeHelper.getStoredFinanceCurrency())
@@ -166,37 +167,6 @@ const summaryItems = computed(() => [
   { key: 'monthly', label: '月均支出', value: formatAmountCNY(projectedMonthlyAvgCNY.value) },
 ])
 
-const hasBackgroundBlur = computed(() => appStore.backgroundEnabled && appStore.cardBlurRadius > 0)
-
-const listBlurClass = computed(() => {
-  if (!hasBackgroundBlur.value)
-    return ''
-  const radius = appStore.cardBlurRadius
-  if (radius <= 8)
-    return 'glass-8'
-  if (radius <= 12)
-    return 'glass-12'
-  if (radius <= 16)
-    return 'glass-16'
-  if (radius <= 20)
-    return 'glass-20'
-  return `glass-${radius}`
-})
-
-const cardBlurClass = listBlurClass
-
-const cardSurfaceClass = computed(() => [
-  { 'glass-card-enabled': hasBackgroundBlur.value },
-  cardBlurClass.value,
-  { 'light-general-contrast': appStore.lightCardContrast && !appStore.isDark },
-])
-
-const listSurfaceClass = computed(() => [
-  { 'light-list-contrast': appStore.lightCardContrast && !appStore.isDark },
-  { 'glass-list-enabled': hasBackgroundBlur.value },
-  listBlurClass.value,
-])
-
 const columnGap = computed(() => appStore.listColumnGap || '12px')
 
 const statusColWidth = computed(() => appStore.listColumnWidths.status || '76px')
@@ -206,8 +176,6 @@ const financeTableGridStyle = computed(() => ({
   gridTemplateColumns: `${statusColWidth.value} ${regionColWidth.value} minmax(220px, 1fr) 108px 96px minmax(160px, 0.75fr) 108px`,
   gap: columnGap.value,
 }))
-
-const { listTableStyle } = useNodeListTable()
 
 function formatExpiryDate(date: Date): string {
   const y = date.getFullYear()
@@ -228,7 +196,7 @@ const billableNodeCount = computed(() => billableNodes.value.length)
 </script>
 
 <template>
-  <div class="finance-value-panel flex flex-col gap-4">
+  <div class="finance-value-panel flex flex-col gap-4 min-w-0 max-w-full">
     <NCard
       :bordered="!hasBackgroundBlur"
       content-class="finance-toolbar-card"
@@ -244,7 +212,7 @@ const billableNodeCount = computed(() => billableNodes.value.length)
       </div>
     </NCard>
 
-    <div class="finance-kpi-grid gap-3 grid grid-cols-2 lg:grid-cols-5">
+    <div class="finance-kpi-grid gap-3 grid grid-cols-2 lg:grid-cols-5 min-w-0 max-w-full">
       <NCard
         v-for="item in summaryItems"
         :key="item.key"
@@ -269,9 +237,7 @@ const billableNodeCount = computed(() => billableNodes.value.length)
       :summary="`${thisMonthTableRows.length} 台 合计 ${formatAmountCNY(thisMonthRenewalCNY)}`"
       :rows="thisMonthTableRows"
       empty-description="本月暂无计划续费"
-      :list-table-style="listTableStyle"
       :grid-style="financeTableGridStyle"
-      :list-surface-class="listSurfaceClass"
       :nodes="nodes"
       :format-amount="formatAmountCNY"
       :format-expiry-date="formatExpiryDate"
@@ -284,9 +250,7 @@ const billableNodeCount = computed(() => billableNodes.value.length)
       :summary="`${nextMonthTableRows.length} 台 合计 ${formatAmountCNY(nextMonthRenewalCNY)}`"
       :rows="nextMonthTableRows"
       empty-description="下月暂无计划续费"
-      :list-table-style="listTableStyle"
       :grid-style="financeTableGridStyle"
-      :list-surface-class="listSurfaceClass"
       :nodes="nodes"
       :format-amount="formatAmountCNY"
       :format-expiry-date="formatExpiryDate"
@@ -299,9 +263,7 @@ const billableNodeCount = computed(() => billableNodes.value.length)
       :summary="`${allServerTableRows.length} 台 剩余 ${formatAmountCNY(totalRemainingCNY)} 月成本 ${formatAmountCNY(totalEffectiveMonthlyCNY)}`"
       :rows="allServerTableRows"
       empty-description="暂无付费节点"
-      :list-table-style="listTableStyle"
       :grid-style="financeTableGridStyle"
-      :list-surface-class="listSurfaceClass"
       :nodes="nodes"
       :format-amount="formatAmountCNY"
       :format-expiry-date="formatExpiryDate"
@@ -315,30 +277,5 @@ const billableNodeCount = computed(() => billableNodes.value.length)
 .light-general-contrast {
   box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.12);
-}
-
-.light-list-contrast {
-  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.08);
-  border-color: rgba(0, 0, 0, 0.12);
-
-  :deep(.n-list-item) {
-    border-color: rgba(0, 0, 0, 0.08);
-  }
-}
-
-.glass-list-enabled {
-  background-color: rgba(255, 255, 255, 0.7) !important;
-
-  :deep(.n-list-item) {
-    background-color: rgba(255, 255, 255, 0.6);
-  }
-}
-
-html.dark .glass-list-enabled {
-  background-color: rgba(24, 24, 28, 0.85) !important;
-
-  :deep(.n-list-item) {
-    background-color: rgba(24, 24, 28, 0.7);
-  }
 }
 </style>
