@@ -132,6 +132,16 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: 'https://status.yaooa.cn',
+        changeOrigin: true,
+        ws: true,
+        headers: {
+          Origin: 'https://status.yaooa.cn',
+        },
+      },
+    },
   },
   build: {
     // 调整 chunk 大小警告阈值
@@ -143,6 +153,7 @@ export default defineConfig({
           'echarts': ['echarts', 'vue-echarts'],
           'naive-ui': ['naive-ui'],
           'vueuse': ['@vueuse/core'],
+          'globe': ['globe.gl', 'three'],
         },
       },
     },

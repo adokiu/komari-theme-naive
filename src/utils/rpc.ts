@@ -170,6 +170,15 @@ export interface PingRecord {
   value: number
 }
 
+/** Ping 探测任务摘要（common:getRecords type=ping 的 tasks） */
+export interface PingTaskInfo {
+  id: number
+  name: string
+  interval?: number
+  /** 已分配探测的服务器 UUID（按任务拉取时返回） */
+  clients?: string[]
+}
+
 /** RPC 错误 */
 export class RpcError extends Error {
   code: number
@@ -563,7 +572,7 @@ export class KomariRpc {
     hours?: number
     task_id?: number
     load_type?: string
-    max_count?: number
+    maxCount?: number
   }): Promise<unknown> {
     return this.client.call('common:getRecords', params)
   }
@@ -577,20 +586,44 @@ export class KomariRpc {
       uuid,
       hours,
       load_type: loadType,
-      max_count: maxCount,
+      maxCount,
+    })
+  }
+
+  /** Ping 汇总（服务端 basic_info） */
+  async getPingRecords(
+    taskId?: number,
+    hours?: number,
+    maxCount?: number,
+    uuid?: string,
+  ): Promise<{
+    records: PingRecord[]
+    basic_info?: Array<{ client: string, loss: number, min: number, max: number }>
+    tasks?: PingTaskInfo[]
+  }> {
+    return this.client.call('common:getRecords', {
+      type: 'ping',
+      uuid,
+      task_id: taskId,
+      hours,
+      maxCount,
     })
   }
 
   /**
-   * 获取 Ping 记录
+   * 公开页 Ping 记录（需 uuid 或 task_id）
    */
-  async getPingRecords(taskId?: number, hours?: number, maxCount?: number): Promise<{ records: PingRecord[] }> {
-    return this.client.call<{ records: PingRecord[] }>('common:getRecords', {
-      type: 'ping',
-      task_id: taskId,
-      hours,
-      max_count: maxCount,
-    })
+  async getPublicPingRecords(params: {
+    uuid?: string
+    task_id?: string | number
+    hours?: number | string
+  }): Promise<{
+    count: number
+    records: PingRecord[]
+    basic_info?: Array<{ client: string, loss: number, min: number, max: number }>
+    tasks?: unknown[]
+  }> {
+    return this.client.call('public:getPingRecords', params)
   }
 
   /**

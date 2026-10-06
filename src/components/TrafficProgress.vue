@@ -179,7 +179,7 @@ const railColor = computed(() => themeVars.value.progressRailColor)
     display: flex;
     overflow: hidden;
     height: 8px;
-    border-radius: 5px;
+    border-radius: 8px;
     transition: background-color 0.3s;
   }
 

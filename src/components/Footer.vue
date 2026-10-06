@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { VersionInfo } from '@/utils/api'
-import { NLayoutFooter, NText } from 'naive-ui'
+import { NText } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { getSharedApi } from '@/utils/api'
@@ -40,30 +40,11 @@ const showIcp = computed(() => appStore.icpEnabled && appStore.icpNumber)
 const showPolice = computed(() => appStore.policeEnabled && appStore.policeNumber)
 const showFiling = computed(() => showIcp.value || showPolice.value)
 
-// 是否启用模糊背景
-const hasBackgroundBlur = computed(() => appStore.backgroundEnabled && appStore.backgroundBlur > 0)
-
-// 计算模糊半径类
-const blurClass = computed(() => {
-  if (!hasBackgroundBlur.value)
-    return ''
-  const radius = appStore.cardBlurRadius
-  if (radius <= 8)
-    return 'glass-8'
-  if (radius <= 12)
-    return 'glass-12'
-  if (radius <= 16)
-    return 'glass-16'
-  if (radius <= 20)
-    return 'glass-20'
-  return `glass-${radius}`
-})
 </script>
 
 <template>
-  <NLayoutFooter
+  <div
     class="px-4 py-4 w-full"
-    :class="[{ 'glass-footer-enabled': hasBackgroundBlur }, blurClass]"
   >
     <div
       class="flex flex-col gap-3 w-full sm:flex-row sm:gap-4 sm:items-center sm:justify-between"
@@ -97,13 +78,13 @@ const blurClass = computed(() => {
             Theme by
           </NText>
           <a
-            href="https://github.com/lyimoexiao/komari-theme-naive"
+            href="https://github.com/adokiu/komari-theme-naive"
             target="_blank"
             rel="noopener noreferrer"
             class="text-decoration-none transition-opacity hover:opacity-80"
           >
             <NText type="primary" class="text-sm font-medium">
-              Komari Naive
+              Komari Naive Neko
             </NText>
           </a>
           <NText :depth="3" class="text-xs font-mono ml-1">
@@ -151,16 +132,5 @@ const blurClass = computed(() => {
         </template>
       </div>
     </div>
-  </NLayoutFooter>
+  </div>
 </template>
-
-<style scoped>
-/* 毛玻璃 Footer 样式 */
-.glass-footer-enabled {
-  background-color: rgba(255, 255, 255, 0.7) !important;
-}
-
-html.dark .glass-footer-enabled {
-  background-color: rgba(24, 24, 28, 0.85) !important;
-}
-</style>

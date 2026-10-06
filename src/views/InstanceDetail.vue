@@ -4,7 +4,7 @@ import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
-import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat } from '@/utils/helper'
+import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptime } from '@/utils/helper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 
@@ -26,7 +26,6 @@ onMounted(() => {
 // 格式化函数
 const formatBytes = (bytes: number) => formatBytesWithConfig(bytes, appStore.byteDecimals)
 const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(bytes, appStore.byteDecimals)
-const formatUptime = (seconds: number) => formatUptimeWithFormat(seconds, appStore.uptimeFormat)
 
 // 视图切换：load 或 ping
 const chartView = ref<'load' | 'ping'>('load')
@@ -111,9 +110,11 @@ const lightCardContrastEnabled = computed(() => appStore.lightCardContrast && !a
           <div class="i-icon-park-outline-arrow-left" />
         </NButton>
         <div class="text-lg font-bold flex gap-2 items-center">
-          <NIcon size="24">
-            <img :src="`/images/flags/${getRegionCode(data.region)}.svg`" :alt="getRegionDisplayName(data.region)">
-          </NIcon>
+          <img
+            :src="`/images/flags/${getRegionCode(data.region)}.svg`"
+            :alt="getRegionDisplayName(data.region)"
+            class="region-flag region-flag--lg"
+          >
           <NText>
             {{ data.name }}
           </NText>

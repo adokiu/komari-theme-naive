@@ -306,6 +306,82 @@ export function parseTags(tags: string | undefined): Array<{ text: string, color
   })
 }
 
+export function isFreePrice(price: number): boolean {
+  return price === -1
+}
+
+export function hasFreeNodeTag(tags: string | undefined): boolean {
+  return parseTags(tags).some(tag => tag.text === '白嫖中')
+}
+
+/** 到期后不再续费，续费计划与到期后支出不计入 */
+export function hasNoRenewAfterExpireTag(tags: string | undefined): boolean {
+  return parseTags(tags).some(tag => tag.text === '到期不续')
+}
+
+export function isFreeNode(node: { price: number, tags?: string }): boolean {
+  return isFreePrice(node.price) || hasFreeNodeTag(node.tags)
+}
+
+const BANDWIDTH_TAG_FULL_PATTERN = /^(\d+(?:\.\d+)?)\s*(Tbps|Gbps|Mbps|Kbps)$/i
+const BANDWIDTH_TAG_TEXT_PATTERN = /(\d+(?:\.\d+)?)\s*(Tbps|Gbps|Mbps|Kbps)/i
+
+function bandwidthValueToMbps(value: number, unit: string): number {
+  const normalized = unit.toLowerCase()
+  if (normalized === 'kbps')
+    return value / 1000
+  if (normalized === 'mbps')
+    return value
+  if (normalized === 'gbps')
+    return value * 1000
+  if (normalized === 'tbps')
+    return value * 1_000_000
+  return value
+}
+
+/** 从节点标签中解析带宽文案（如 200Mbps、1Gbps） */
+export function parseBandwidthTagText(tags: string | undefined): string | null {
+  if (!tags || tags.trim() === '')
+    return null
+
+  for (const tag of parseTags(tags)) {
+    const trimmed = tag.text.trim()
+    const full = trimmed.match(BANDWIDTH_TAG_FULL_PATTERN)
+    if (full)
+      return `${full[1]}${full[2]}`
+    const match = trimmed.match(BANDWIDTH_TAG_TEXT_PATTERN)
+    if (match)
+      return `${match[1]}${match[2]}`
+  }
+
+  for (const raw of tags.split(';')) {
+    const { text } = parseTagWithColor(raw.trim())
+    const match = text.match(BANDWIDTH_TAG_TEXT_PATTERN)
+    if (match)
+      return `${match[1]}${match[2]}`
+  }
+
+  return null
+}
+
+/** 标签带宽折算为 Mbps，供成本对比使用 */
+export function parseBandwidthMbpsFromTags(tags: string | undefined): number | null {
+  const label = parseBandwidthTagText(tags)
+  if (!label)
+    return null
+
+  const match = label.match(BANDWIDTH_TAG_TEXT_PATTERN)
+  if (!match)
+    return null
+
+  const value = Number(match[1])
+  const unit = match[2]
+  if (!Number.isFinite(value) || value <= 0 || !unit)
+    return null
+
+  return bandwidthValueToMbps(value, unit)
+}
+
 /**
  * 格式化价格显示
  * @param price 价格
@@ -336,8 +412,73 @@ export function formatPriceWithCycle(
   lang: 'zh-CN' | 'en-US' = 'zh-CN',
 ): string {
   const priceText = formatPrice(price, currency, lang)
+  if (price === 0 || price === -1)
+    return priceText
   const cycleText = getBillingCycleText(billingCycle, lang)
   return `${priceText}/${cycleText}`
+}
+
+// 货币符号到 ISO 代码映射
+const CURRENCY_CODE_MAP: Record<string, string> = {
+  '￥': 'CNY',
+  '$': 'USD',
+  '€': 'EUR',
+  '£': 'GBP',
+  '₽': 'RUB',
+  '₣': 'CHF',
+  '₹': 'INR',
+  '₫': 'VND',
+  '฿': 'THB',
+}
+
+/** 静态汇率回退：1 单位外币 = 多少 CNY */
+export const FALLBACK_RATES: Record<string, number> = {
+  '￥': 1,
+  '$': 7.2,
+  '€': 7.8,
+  '£': 9.3,
+  '₽': 0.08,
+  '₣': 8.2,
+  '₹': 0.085,
+  '₫': 0.00029,
+  '฿': 0.21,
+}
+
+/** 在线汇率缓存 */
+let exchangeRatesCache: Record<string, number> | null = null
+let exchangeRatesFetchTime = 0
+
+/**
+ * 获取在线汇率
+ * @returns 货币符号到人民币汇率的映射
+ */
+export async function fetchExchangeRates(): Promise<Record<string, number>> {
+  if (exchangeRatesCache && Date.now() - exchangeRatesFetchTime < 3600000) {
+    return exchangeRatesCache
+  }
+
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/CNY')
+    const data = await res.json()
+    if (!data.rates) throw new Error('No rates data')
+
+    const rates: Record<string, number> = {}
+    for (const [symbol, code] of Object.entries(CURRENCY_CODE_MAP)) {
+      if (code === 'CNY') {
+        rates[symbol] = 1
+      } else if (data.rates[code]) {
+        rates[symbol] = 1 / data.rates[code]
+      } else {
+        rates[symbol] = FALLBACK_RATES[symbol] ?? 1
+      }
+    }
+
+    exchangeRatesCache = rates
+    exchangeRatesFetchTime = Date.now()
+    return rates
+  } catch {
+    return { ...FALLBACK_RATES }
+  }
 }
 
 /**

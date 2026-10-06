@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NAvatar, NButton, NFlex, NH3, NPopover } from 'naive-ui'
-import { computed, h, inject, ref } from 'vue'
+import { NAvatar, NButton, NFlex, NH3, NInput, NPopover } from 'naive-ui'
+import { computed, h, inject, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import LoginDialog from './LoginDialog.vue'
@@ -12,6 +12,22 @@ const appStore = useAppStore()
 const isScrolled = inject<ReturnType<typeof ref<boolean>>>('isScrolled', ref(false))
 
 const siteFavicon = ref('/favicon.ico')
+const searchPopoverVisible = ref(false)
+const searchInputRef = ref<{ focus: () => void } | null>(null)
+
+const hasActiveSearch = computed(() => appStore.nodeSearchText.trim().length > 0)
+
+async function handleSearchPopoverShow(show: boolean) {
+  searchPopoverVisible.value = show
+  if (show) {
+    await nextTick()
+    searchInputRef.value?.focus()
+  }
+}
+
+function clearNodeSearch() {
+  appStore.nodeSearchText = ''
+}
 
 // 计算页面容器的样式
 const containerStyle = computed(() => {
@@ -24,6 +40,19 @@ const containerStyle = computed(() => {
   }
 })
 
+const searchButtonMeta = computed(() => ({
+  title: hasActiveSearch.value ? '搜索中（点击修改）' : '搜索节点',
+  icon: 'i-icon-park-outline-search',
+  active: hasActiveSearch.value,
+}))
+
+function toggleSearchPopover() {
+  searchPopoverVisible.value = !searchPopoverVisible.value
+  if (searchPopoverVisible.value) {
+    void handleSearchPopoverShow(true)
+  }
+}
+
 const actionButtons = computed(() => {
   const buttons = [
     {
@@ -31,6 +60,7 @@ const actionButtons = computed(() => {
       icon: appStore.themeMode === 'auto' ? 'i-icon-park-outline-dark-mode' : appStore.themeMode === 'light' ? 'i-icon-park-outline-sun-one' : 'i-icon-park-outline-moon',
       action: 'toggleTheme',
       disabled: false,
+      active: false,
     },
   ]
 
@@ -41,6 +71,7 @@ const actionButtons = computed(() => {
       icon: 'i-icon-park-outline-setting',
       action: 'jumpToSetting',
       disabled: false,
+      active: false,
     })
   }
   else if (appStore.showLoginButton) {
@@ -49,6 +80,7 @@ const actionButtons = computed(() => {
       icon: 'i-icon-park-outline-login',
       action: 'openLoginDialog',
       disabled: false,
+      active: false,
     })
   }
 
@@ -85,10 +117,57 @@ function handleButtonClick(action: string) {
           {{ appStore.publicSettings?.sitename || 'Komari Monitor' }}
         </NH3>
       </NFlex>
-      <NFlex class="flex gap-4">
+      <NFlex class="flex gap-4 items-center">
+        <NPopover
+          :show="searchPopoverVisible"
+          trigger="manual"
+          placement="bottom-end"
+          :show-arrow="false"
+          @update:show="handleSearchPopoverShow"
+        >
+          <template #trigger>
+            <NPopover>
+              <template #trigger>
+                <NButton
+                  class="p-2 h-8 w-8"
+                  text
+                  :type="searchButtonMeta.active ? 'primary' : 'default'"
+                  @click="toggleSearchPopover"
+                >
+                  <div :class="searchButtonMeta.icon" />
+                </NButton>
+              </template>
+              <template #default>
+                {{ searchButtonMeta.title }}
+              </template>
+            </NPopover>
+          </template>
+          <template #default>
+            <div class="header-search-popover w-72 flex flex-col gap-2">
+              <NInput
+                ref="searchInputRef"
+                v-model:value="appStore.nodeSearchText"
+                placeholder="搜索节点名称、地区、系统"
+                clearable
+                @keydown.esc="searchPopoverVisible = false"
+                @clear="clearNodeSearch"
+              >
+                <template #prefix>
+                  <div class="i-icon-park-outline-search" />
+                </template>
+              </NInput>
+            </div>
+          </template>
+        </NPopover>
         <NPopover v-for="button in actionButtons" :key="button.action" :disabled="button.disabled">
           <template #trigger>
-            <NButton :disabled="button.disabled" class="p-2 h-8 w-8" text @click="handleButtonClick(button.action)">
+            <NButton
+              :disabled="button.disabled"
+              class="p-2 h-8 w-8"
+              text
+              :type="button.active ? 'primary' : 'default'"
+              @click="handleButtonClick(button.action)"
+            >
               <div :class="button.icon" />
             </NButton>
           </template>

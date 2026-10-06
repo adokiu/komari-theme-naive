@@ -1,5 +1,5 @@
 import type { MeInfo, PublicSettings } from '@/utils/api'
-import type { ByteDecimalsConfig, UptimeFormat } from '@/utils/helper'
+import type { ByteDecimalsConfig } from '@/utils/helper'
 import { usePreferredDark, useStorageAsync } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
@@ -17,7 +17,7 @@ type ListViewColumn = typeof DEFAULT_LIST_VIEW_COLUMNS[number]
 /** 默认的 List 视图列宽度配置 */
 const DEFAULT_LIST_COLUMN_WIDTHS: Record<string, string> = {
   status: '76px',
-  region: '32px',
+  region: '40px',
   name: 'minmax(200px, 1fr)',
   tags: '200px',
   uptime: 'minmax(180px, 0.6fr)',
@@ -47,6 +47,8 @@ const useAppStore = defineStore('app', () => {
   const publicSettings = ref<PublicSettings>()
   const userInfo = ref<MeInfo>()
   const nodeSelectedGroup = useStorageAsync<string>('nodeSelectedGroup', 'all', localStorage)
+  /** 首页节点搜索（Header 搜索按钮） */
+  const nodeSearchText = ref('')
   const isLoggedIn = ref<boolean>(false)
   const connectionError = ref<boolean>(false)
   const requireLogin = ref<boolean>(false)
@@ -186,6 +188,15 @@ const useAppStore = defineStore('app', () => {
     return true
   })
 
+  // 计算属性：列表视图离线节点后置
+  const listOfflineNodesLast = computed<boolean>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.listOfflineNodesLast === 'boolean') {
+      return settings.listOfflineNodesLast
+    }
+    return false
+  })
+
   // 计算属性：List 视图列宽度配置
   const listColumnWidths = computed<Record<string, string>>(() => {
     const settings = publicSettings.value?.theme_settings
@@ -318,6 +329,17 @@ const useAppStore = defineStore('app', () => {
     return 'tag'
   })
 
+  /** 登录后可使用完整 IP 做 ASN/Org 查询（与 Glassmorphism-Plus privateFeaturesAllowed 一致） */
+  const privateFeaturesAllowed = computed<boolean>(() => isLoggedIn.value)
+
+  /** 厂商自定义别名，格式：Provider:alias1,alias2;Provider2:alias */
+  const providerAliases = computed<string>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.providerAliases === 'string')
+      return settings.providerAliases.trim()
+    return ''
+  })
+
   // 计算属性：是否显示延迟图表按钮
   const showPingChartButton = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
@@ -343,20 +365,6 @@ const useAppStore = defineStore('app', () => {
       return settings.uptimeTagWrap
     }
     return false
-  })
-
-  // 计算属性：运行时间格式配置
-  const uptimeFormat = computed<UptimeFormat>(() => {
-    const settings = publicSettings.value?.theme_settings
-    const validFormats: UptimeFormat[] = ['day', 'hour', 'minute', 'second']
-
-    if (settings && typeof settings.uptimeFormat === 'string') {
-      const format = settings.uptimeFormat as UptimeFormat
-      if (validFormats.includes(format)) {
-        return format
-      }
-    }
-    return 'day'
   })
 
   // 计算属性：亮色模式卡片高对比度
@@ -572,6 +580,12 @@ const useAppStore = defineStore('app', () => {
     return themeMode.value === 'dark'
   })
 
+  const stopEarth = computed(() => {
+    const settings = publicSettings.value?.theme_settings as Record<string, unknown> | undefined
+    const value = settings?.stopEarth
+    return value === true || value === 'true'
+  })
+
   // 计算属性：当前主题模式下的背景 URL
   const currentBackgroundUrl = computed<string>(() => {
     if (isDark.value) {
@@ -613,8 +627,10 @@ const useAppStore = defineStore('app', () => {
     loading,
     themeMode,
     isDark,
+    stopEarth,
     lang,
     nodeSelectedGroup,
+    nodeSearchText,
     nodeViewMode,
     defaultViewMode,
     rpcTransportMode,
@@ -625,6 +641,7 @@ const useAppStore = defineStore('app', () => {
     numberFontFamily,
     listViewColumns,
     hideSingleGroupTab,
+    listOfflineNodesLast,
     listColumnWidths,
     listColumnGap,
     listColumnPadding,
@@ -635,7 +652,6 @@ const useAppStore = defineStore('app', () => {
     showPingChartButton,
     tagsInSeparateRow,
     uptimeTagWrap,
-    uptimeFormat,
     lightCardContrast,
     trafficSplitColor,
     byteDecimals,
@@ -658,6 +674,8 @@ const useAppStore = defineStore('app', () => {
     backgroundOverlay,
     cardBlurRadius,
     isLoggedIn,
+    privateFeaturesAllowed,
+    providerAliases,
     userInfo,
     publicSettings,
     connectionError,

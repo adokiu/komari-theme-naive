@@ -353,7 +353,7 @@ const baseTooltipConfig = computed(() => ({
   backgroundColor: chartThemeColors.value.tooltipBg,
   borderColor: 'transparent',
   borderWidth: 0,
-  borderRadius: 8,
+  borderRadius: 12,
   padding: [10, 14],
   boxShadow: `0 4px 16px ${chartThemeColors.value.tooltipShadow}`,
   textStyle: {
@@ -575,7 +575,7 @@ const blurClass = computed(() => {
             @click="toggleTask(task.id)"
           >
             <div
-              class="rounded-md flex-shrink-0 h-10 w-1.5"
+              class="rounded-lg flex-shrink-0 h-10 w-1.5"
               :style="{ backgroundColor: task.color }"
             />
             <div class="flex-1 min-w-0">

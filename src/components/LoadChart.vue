@@ -71,7 +71,7 @@ const baseTooltipConfig = computed(() => ({
   backgroundColor: chartThemeColors.value.tooltipBg,
   borderColor: 'transparent',
   borderWidth: 0,
-  borderRadius: 8,
+  borderRadius: 12,
   padding: [10, 14],
   boxShadow: `0 4px 16px ${chartThemeColors.value.tooltipShadow}`,
   textStyle: {

@@ -41,6 +41,7 @@ class InitManager {
   private isInitialized = false
   private useWebSocket: boolean | null = null // 根据主题配置决定
   private postFailureCount = 0
+  private visibilityHandler: (() => void) | null = null
 
   constructor(config: InitConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -153,6 +154,14 @@ class InitManager {
   }
 
   /**
+   * 登录成功后刷新用户信息与节点（管理员可获得完整 IP，供 ASN/Org 查询）
+   */
+  async refreshAfterLogin(): Promise<void> {
+    await this.fetchUserInfo()
+    await this.fetchNodesData()
+  }
+
+  /**
    * 强制登录成功后重新初始化
    */
   private async reinitAfterForceLogin(): Promise<void> {
@@ -253,6 +262,9 @@ class InitManager {
 
     // 开始轮询（作为 WebSocket 的补充或备选方案）
     this.startPolling()
+
+    // 监听页面可见性变化，切回前台时检查 WebSocket 状态
+    this.bindVisibilityListener()
   }
 
   /**
@@ -285,6 +297,42 @@ class InitManager {
       console.error('[InitManager] WebSocket connection failed:', error)
       this.nodesStore.updateWsState('disconnected')
       this.scheduleReconnect()
+    }
+  }
+
+  /**
+   * 绑定页面可见性监听
+   */
+  private bindVisibilityListener(): void {
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler)
+    }
+    this.visibilityHandler = () => this.handleVisibilityChange()
+    document.addEventListener('visibilitychange', this.visibilityHandler)
+  }
+
+  /**
+   * 处理页面可见性变化
+   */
+  private handleVisibilityChange(): void {
+    if (document.visibilityState !== 'visible') {
+      return
+    }
+    if (this.useWebSocket === false) {
+      return
+    }
+
+    const state = this.nodesStore.wsConnectionState
+    // 正在连接或重连中，不重复触发
+    if (state === 'connecting' || state === 'reconnecting') {
+      return
+    }
+
+    const client = this.rpc.getClient()
+    if (client.getWsReadyState() !== WebSocket.OPEN) {
+      // 连接未建立或已断开，立即重连
+      this.nodesStore.updateWsState('disconnected', 0)
+      this.connectWebSocket()
     }
   }
 
@@ -447,8 +495,9 @@ class InitManager {
     this.useWebSocket = configuredMode === 'websocket'
     this.nodesStore.updateWsState('disconnected', 0)
 
-    // 重新获取用户信息
+    // 重新获取用户信息并拉取节点（管理员登录后可拿到完整 IP，供 ASN/Org 查询）
     await this.fetchUserInfo()
+    await this.fetchNodesData()
 
     // 重新建立 WebSocket 连接（如果配置为 websocket 模式）
     this.connectWebSocket()
@@ -462,6 +511,11 @@ class InitManager {
     this.rpc.close()
     this.nodesStore.clearNodes()
     this.isInitialized = false
+
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler)
+      this.visibilityHandler = null
+    }
   }
 }
 
@@ -484,6 +538,11 @@ export async function initApp(): Promise<void> {
  */
 export function getInitManager(): InitManager | null {
   return initManager
+}
+
+/** 普通登录成功后刷新节点数据（含 IP） */
+export async function refreshAfterLogin(): Promise<void> {
+  await initManager?.refreshAfterLogin()
 }
 
 /**

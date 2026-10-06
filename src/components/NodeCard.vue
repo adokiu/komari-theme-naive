@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 import PingChart from '@/components/PingChart.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
 import { useAppStore } from '@/stores/app'
-import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
+import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptime, getStatus } from '@/utils/helper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, getExpireStatusHexColor, parseTags } from '@/utils/tagHelper'
@@ -29,7 +29,6 @@ const showPingChart = ref(false)
 // 格式化函数
 const formatBytes = (bytes: number) => formatBytesWithConfig(bytes, appStore.byteDecimals)
 const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(bytes, appStore.byteDecimals)
-const formatUptime = (seconds: number) => formatUptimeWithFormat(seconds, appStore.uptimeFormat)
 const offlineTime = computed(() => formatDateTime(props.node.time))
 
 // 计算统计信息
@@ -172,15 +171,17 @@ const cardBlurClass = computed(() => {
     >
       <template #header>
         <div class="flex gap-2 min-w-0 items-center">
-          <NIcon class="shrink-0">
-            <img :src="`/images/flags/${getRegionCode(props.node.region)}.svg`" :alt="getRegionDisplayName(props.node.region)">
-          </NIcon>
+          <img
+            :src="`/images/flags/${getRegionCode(props.node.region)}.svg`"
+            :alt="getRegionDisplayName(props.node.region)"
+            class="region-flag"
+          >
           <!-- 自定义标签显示在节点名前（仅当 tagsInSeparateRow 为 false 时） -->
-          <div v-if="customTags.length > 0 && !appStore.tagsInSeparateRow" class="has-tags flex shrink-0 flex-wrap gap-1 items-center">
+          <div v-if="customTags.length > 0 && !appStore.tagsInSeparateRow" class="has-tags compact-node-tags flex shrink-0 flex-wrap items-center">
             <NTag
               v-for="(tag, index) in customTags"
               :key="index"
-              size="small"
+              size="tiny"
               :color="{ color: `${tag.color}20`, textColor: tag.color, borderColor: `${tag.color}40` }"
             >
               {{ tag.text }}
@@ -226,9 +227,11 @@ const cardBlurClass = computed(() => {
         <div v-if="!props.node.online" class="node-offline-overlay" aria-hidden="true">
           <div class="node-offline-overlay__content">
             <div class="node-offline-overlay__header flex gap-2 min-w-0 items-center justify-center">
-              <NIcon class="shrink-0">
-                <img :src="`/images/flags/${getRegionCode(props.node.region)}.svg`" :alt="getRegionDisplayName(props.node.region)">
-              </NIcon>
+              <img
+                :src="`/images/flags/${getRegionCode(props.node.region)}.svg`"
+                :alt="getRegionDisplayName(props.node.region)"
+                class="region-flag"
+              >
               <NText class="text-base font-semibold text-center break-all">
                 {{ props.node.name }}
               </NText>
@@ -239,11 +242,11 @@ const cardBlurClass = computed(() => {
             <NText :depth="3" class="text-xs text-center" :style="{ fontFamily: appStore.numberFontFamily }">
               最后在线 {{ offlineTime }}
             </NText>
-            <div v-if="!appStore.tagsInSeparateRow && priceTags.length > 0" class="node-offline-overlay__tags flex flex-wrap gap-1 items-center justify-center">
+            <div v-if="!appStore.tagsInSeparateRow && priceTags.length > 0" class="node-offline-overlay__tags compact-node-tags flex flex-wrap items-center justify-center">
               <NTag
                 v-for="(tag, index) in priceTags"
                 :key="index"
-                size="small"
+                size="tiny"
                 :color="{ color: `${tag.color}20`, textColor: tag.color, borderColor: `${tag.color}40` }"
               >
                 {{ tag.text }}
@@ -257,14 +260,19 @@ const cardBlurClass = computed(() => {
             <NText :depth="3" class="text-[13px]">
               操作系统
             </NText>
-            <div class="flex gap-2 items-center">
-              <NIcon>
-                <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)">
-              </NIcon>
-              <NText class="text-[13px]">
-                {{ getOSName(props.node.os) }} / {{ props.node.arch }}
-              </NText>
-            </div>
+            <NTooltip>
+              <template #trigger>
+                <div class="flex gap-2 items-center">
+                  <NIcon>
+                    <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)">
+                  </NIcon>
+                  <NText class="text-[13px]">
+                    {{ getOSName(props.node.os) }} / {{ props.node.arch }}
+                  </NText>
+                </div>
+              </template>
+              {{ props.node.os }}
+            </NTooltip>
           </div>
 
           <!-- 进度条区域：支持一行一列或一行两列布局 -->
@@ -373,16 +381,16 @@ const cardBlurClass = computed(() => {
             </NText>
             <div class="flex gap-2 items-center">
               <!-- 当标签不在单独一行显示时，价格标签显示在运行时间行 -->
-              <template v-if="!shouldShowTagsInSeparateRow">
+              <div v-if="!shouldShowTagsInSeparateRow && priceTags.length > 0" class="compact-node-tags flex flex-wrap items-center">
                 <NTag
                   v-for="(tag, index) in priceTags"
                   :key="index"
-                  size="small"
+                  size="tiny"
                   :color="{ color: `${tag.color}20`, textColor: tag.color, borderColor: `${tag.color}40` }"
                 >
                   {{ tag.text }}
                 </NTag>
-              </template>
+              </div>
               <!-- 根据 uptimeTagWrap 配置选择显示方式 -->
               <NTag v-if="appStore.uptimeTagWrap" size="small" :color="{ color: `#8b5cf620`, textColor: '#8b5cf6', borderColor: `#8b5cf640` }">
                 {{ formatUptime(props.node.uptime ?? 0) }}
@@ -398,11 +406,11 @@ const cardBlurClass = computed(() => {
             <NText :depth="3" class="text-[13px]">
               标签
             </NText>
-            <div class="flex flex-wrap gap-1 items-center justify-end">
+            <div class="compact-node-tags flex flex-wrap items-center justify-end">
               <NTag
                 v-for="(tag, index) in mergedTags"
                 :key="index"
-                size="small"
+                size="tiny"
                 :color="{ color: `${tag.color}20`, textColor: tag.color, borderColor: `${tag.color}40` }"
               >
                 {{ tag.text }}
@@ -474,7 +482,7 @@ const cardBlurClass = computed(() => {
   position: absolute;
   backdrop-filter: blur(8px);
   padding: 12px 22px 19px;
-  border-radius: 10px;
+  border-radius: 16px;
   left: 1px;
   right: 1px;
   bottom: 1px;

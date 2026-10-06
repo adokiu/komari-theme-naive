@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import type { NodeData } from '@/stores/nodes'
 import { NBadge, NButton, NIcon, NList, NListItem, NModal, NProgress, NTag, NText, NTooltip, useThemeVars } from 'naive-ui'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import PingChart from '@/components/PingChart.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
+import { useNodeListTable } from '@/composables/useNodeListTable'
+import { useNodeProviderMetadata } from '@/composables/useNodeProviderMetadata'
 import { useAppStore } from '@/stores/app'
-import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
-import { getOSImage, getOSName } from '@/utils/osImageHelper'
+import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptime, getStatus } from '@/utils/helper'
+import { getOSImage } from '@/utils/osImageHelper'
+import ProviderBrandIcon from '@/components/ProviderBrandIcons.vue'
+import { cleanProviderOrg, providerListSvgIcon } from '@/utils/providerInfo'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
-import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, parseTags } from '@/utils/tagHelper'
+import { FALLBACK_RATES, fetchExchangeRates, formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, hasNoRenewAfterExpireTag, parseTags } from '@/utils/tagHelper'
+
+interface NodeDisplayTag {
+  key: string
+  text: string
+  color: string
+  icon?: string
+  title?: string
+}
 
 const props = defineProps<{
   nodes: NodeData[]
@@ -27,12 +39,115 @@ const isTouchDevice = computed(() => {
 
 const appStore = useAppStore()
 
+const { metadataByUuid, getNodeProviderMetadata } = useNodeProviderMetadata({
+  nodes: () => props.nodes,
+  customAliases: () => appStore.providerAliases,
+  enabled: () => true,
+  allowGeoLookup: () => appStore.privateFeaturesAllowed,
+})
+
 // 获取 Naive UI 主题变量
 const themeVars = useThemeVars()
 
 // 延迟图表弹窗状态
 const showPingChart = ref(false)
 const selectedNode = ref<NodeData | null>(null)
+
+// 汇率状态
+const exchangeRates = ref<Record<string, number>>({ ...FALLBACK_RATES })
+onMounted(async () => {
+  const rates = await fetchExchangeRates()
+  exchangeRates.value = rates
+})
+
+// 月付总价（折算人民币）
+const monthlyTotalCNY = computed(() => {
+  return props.nodes.reduce((total, node) => {
+    const price = node.price ?? 0
+    if (price <= 0 || price === -1) return total
+    const cycle = node.billing_cycle ?? 30
+    if (cycle <= 0) return total
+    const rate = exchangeRates.value[node.currency] ?? 1
+    const monthlyPrice = price * rate * (30 / cycle)
+    return total + monthlyPrice
+  }, 0)
+})
+
+// 本月到期需续费总价（不按月折算，只折算汇率）
+const monthlyRenewalCNY = computed(() => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const lastDay = new Date(year, month + 1, 0, 23, 59, 59, 999)
+  return props.nodes.reduce((total, node) => {
+    const price = node.price ?? 0
+    if (price <= 0 || price === -1) return total
+    if (hasNoRenewAfterExpireTag(node.tags)) return total
+    const expiredAt = node.expired_at ? new Date(node.expired_at) : null
+    if (!expiredAt) return total
+    if (expiredAt >= now && expiredAt <= lastDay) {
+      const rate = exchangeRates.value[node.currency] ?? 1
+      total += price * rate
+    }
+    return total
+  }, 0)
+})
+
+// 下月到期需续费总价（不按月折算，只折算汇率）
+const nextMonthRenewalCNY = computed(() => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const firstDay = new Date(year, month + 1, 1)
+  const lastDay = new Date(year, month + 2, 0, 23, 59, 59, 999)
+  return props.nodes.reduce((total, node) => {
+    const price = node.price ?? 0
+    if (price <= 0 || price === -1) return total
+    if (hasNoRenewAfterExpireTag(node.tags)) return total
+    const expiredAt = node.expired_at ? new Date(node.expired_at) : null
+    if (!expiredAt) return total
+    if (expiredAt >= firstDay && expiredAt <= lastDay) {
+      const rate = exchangeRates.value[node.currency] ?? 1
+      total += price * rate
+    }
+    return total
+  }, 0)
+})
+
+// CPU 实际占用核心数 / 总核心数
+const totalCpuUsed = computed(() => props.nodes.reduce((sum, node) => sum + ((node.cpu_cores ?? 0) * (node.cpu ?? 0) / 100), 0))
+const totalCpuAll = computed(() => props.nodes.reduce((sum, node) => sum + (node.cpu_cores ?? 0), 0))
+
+// CPU 型号汇总（用于 tooltip，相同型号合并核心数）
+const cpuModelSummary = computed(() => {
+  const map = new Map<string, number>()
+  for (const node of props.nodes) {
+    const count = map.get(node.cpu_name) ?? 0
+    map.set(node.cpu_name, count + (node.cpu_cores ?? 1))
+  }
+  return Array.from(map.entries()).map(([name, cores]) => `${name} x${cores}核`).join('\n')
+})
+
+// 地区汇总（用于 tooltip）
+const regionSummary = computed(() => {
+  const map = new Map<string, number>()
+  for (const node of props.nodes) {
+    const count = map.get(node.region) ?? 0
+    map.set(node.region, count + 1)
+  }
+  return Array.from(map.entries()).map(([region, count]) => ({ region, count }))
+})
+
+// 内存实际使用 / 总内存
+const totalMemUsed = computed(() => props.nodes.reduce((sum, node) => sum + (node.ram ?? 0), 0))
+const totalMemAll = computed(() => props.nodes.reduce((sum, node) => sum + (node.mem_total ?? 0), 0))
+
+// 硬盘实际使用 / 总硬盘
+const totalDiskUsed = computed(() => props.nodes.reduce((sum, node) => sum + (node.disk ?? 0), 0))
+const totalDiskAll = computed(() => props.nodes.reduce((sum, node) => sum + (node.disk_total ?? 0), 0))
+
+// 所有机器流量总计（上传+下载）
+const totalTrafficUsed = computed(() => props.nodes.reduce((sum, node) => sum + (node.net_total_up ?? 0) + (node.net_total_down ?? 0), 0))
 
 // 排序状态
 const sortKey = ref<string>('')
@@ -48,13 +163,28 @@ function handleSort(col: string) {
   }
 }
 
+function nodesWithOfflineLast(nodes: NodeData[]): NodeData[] {
+  const online: NodeData[] = []
+  const offline: NodeData[] = []
+  for (const node of nodes) {
+    if (node.online)
+      online.push(node)
+    else
+      offline.push(node)
+  }
+  return [...online, ...offline]
+}
+
 // 排序后的节点列表
 const sortedNodes = computed(() => {
-  const nodes = [...props.nodes]
+  let nodes = [...props.nodes]
   const key = sortKey.value
   const dir = sortDir.value
-  if (!key)
+  if (!key) {
+    if (appStore.listOfflineNodesLast)
+      nodes = nodesWithOfflineLast(nodes)
     return nodes
+  }
   return nodes.sort((a, b) => {
     switch (key) {
       case 'status':
@@ -98,17 +228,16 @@ const sortedNodes = computed(() => {
   })
 })
 
-// 列可见性计算
 const columns = computed(() => appStore.listViewColumns)
+const gridColumns = computed(() => columns.value)
 
 // 格式化函数
 const formatBytes = (bytes: number) => formatBytesWithConfig(bytes, appStore.byteDecimals)
 const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(bytes, appStore.byteDecimals)
-const formatUptime = (seconds: number) => formatUptimeWithFormat(seconds, appStore.uptimeFormat)
 
 // 动态生成 grid 样式，使用配置的列宽度和间距
 const gridStyle = computed(() => {
-  const visibleColumns = columns.value
+  const visibleColumns = gridColumns.value
   const columnWidths = appStore.listColumnWidths
   const columnGap = appStore.listColumnGap
   const templateColumns = visibleColumns.map(col => columnWidths[col] || 'auto')
@@ -119,9 +248,9 @@ const gridStyle = computed(() => {
 })
 
 const offlineOverlayContentStyle = computed(() => {
-  const statusIndex = columns.value.indexOf('status')
-  const regionIndex = columns.value.indexOf('region')
-  const nameIndex = columns.value.indexOf('name')
+  const statusIndex = gridColumns.value.indexOf('status')
+  const regionIndex = gridColumns.value.indexOf('region')
+  const nameIndex = gridColumns.value.indexOf('name')
 
   const startColumn = nameIndex !== -1
     ? nameIndex + 1
@@ -135,14 +264,14 @@ const offlineOverlayContentStyle = computed(() => {
 })
 
 const offlineOverlayMaskStyle = computed(() => {
-  const statusIndex = columns.value.indexOf('status')
+  const statusIndex = gridColumns.value.indexOf('status')
   return {
     gridColumn: statusIndex === -1 ? '1 / -1' : `${statusIndex + 2} / -1`,
   }
 })
 
 const offlineOverlayRegionStyle = computed(() => {
-  const regionIndex = columns.value.indexOf('region')
+  const regionIndex = gridColumns.value.indexOf('region')
   if (regionIndex === -1) {
     return null
   }
@@ -178,14 +307,7 @@ function getColumnStyle(col: string): Record<string, string> {
   }
 }
 
-// 计算行高度样式
-const rowHeightStyle = computed(() => {
-  const height = appStore.listRowHeight
-  if (height) {
-    return { height, minHeight: height }
-  }
-  return {}
-})
+const { listTableStyle } = useNodeListTable()
 
 // 是否启用背景模糊
 const hasBackgroundBlur = computed(() => {
@@ -296,37 +418,147 @@ function getExpireBadgeColor(status: string): string {
   }
 }
 
-// 计算节点的标签列表（返回颜色）
-function getNodeTags(node: NodeData): Array<{ text: string, color: string }> {
-  const tags: Array<{ text: string, color: string }> = []
-  const lang = appStore.lang
+/** 节点名称下方：仅 ASN / 厂商（org） */
+const LIST_NAME_NETWORK_FIELDS = ['provider', 'asn'] as const
 
-  // 前两个标签：剩余天数和价格（price > 0 时显示）
-  if (node.price !== 0) {
-    // 剩余天数标签
-    const days = getDaysUntilExpired(node.expired_at)
-    const status = getExpireStatus(node.expired_at)
-    const color = getExpireBadgeColor(status)
+interface NodeMetadataItem {
+  key: string
+  value: string
+  title?: string
+  icon?: string
+  color?: string
+}
 
-    if (status === 'expired') {
-      tags.push({ text: lang === 'zh-CN' ? '已过期' : 'Expired', color })
-    }
-    else if (status === 'long_term') {
-      tags.push({ text: lang === 'zh-CN' ? '长期' : 'Long-term', color })
-    }
-    else {
-      tags.push({ text: lang === 'zh-CN' ? `剩余 ${days} 天` : `${days} days left`, color })
-    }
+function buildNodeNetworkItems(node: NodeData): NodeMetadataItem[] {
+  const items: NodeMetadataItem[] = []
+  const providerMetadata = getNodeProviderMetadata(node)
+  const resolved = providerMetadata?.provider
 
-    // 价格标签
-    const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
-    tags.push({ text: priceText, color: '#0090FF' }) // 蓝色
+  for (const field of LIST_NAME_NETWORK_FIELDS) {
+    switch (field) {
+      case 'provider': {
+        if (!resolved?.displayName)
+          break
+
+        items.push({
+          key: 'provider',
+          value: resolved.displayName,
+          icon: providerListSvgIcon(resolved.primary.icon),
+          title: resolved.tooltipLines.length > 0 ? resolved.tooltipLines.join('\n') : resolved.displayName,
+        })
+        break
+      }
+      case 'asn': {
+        const asn = providerMetadata?.geo?.asn
+        if (!asn)
+          break
+
+        items.push({
+          key: 'asn',
+          value: asn,
+          title: (() => {
+            const org = providerMetadata?.geo?.org
+            if (!org)
+              return asn
+            const orgLabel = cleanProviderOrg(org)
+            return orgLabel ? `${asn}\n${orgLabel}` : asn
+          })(),
+        })
+        break
+      }
+    }
   }
 
-  // 后续标签：从 tags 字段解析
-  const customTags = parseTags(node.tags)
-  for (const tag of customTags) {
-    tags.push({ text: tag.text, color: tag.hex })
+  return items
+}
+
+const nodeNetworkItemsByUuid = computed(() => {
+  void metadataByUuid.value
+  const itemsByUuid: Record<string, NodeMetadataItem[]> = {}
+  for (const node of props.nodes)
+    itemsByUuid[node.uuid] = buildNodeNetworkItems(node)
+  return itemsByUuid
+})
+
+function metadataItemToDisplayTag(item: NodeMetadataItem): NodeDisplayTag {
+  if (item.key === 'provider') {
+    const fullTitle = item.title ?? item.value
+    return {
+      key: item.key,
+      text: item.value,
+      color: '#6366F1',
+      icon: providerListSvgIcon(item.icon),
+      title: fullTitle,
+    }
+  }
+  if (item.key === 'asn') {
+    return {
+      key: item.key,
+      text: item.value,
+      color: '#0EA5E9',
+      title: item.title,
+    }
+  }
+  return {
+    key: item.key,
+    text: item.value,
+    color: item.color ?? '#64748B',
+    icon: item.icon,
+    title: item.title,
+  }
+}
+
+/** 名称下方：厂商 / ASN */
+function getNodeNetworkTags(node: NodeData): NodeDisplayTag[] {
+  return (nodeNetworkItemsByUuid.value[node.uuid] ?? []).map(item => metadataItemToDisplayTag(item))
+}
+
+/** 名称下方：剩余时长（有价节点） */
+function getNodeExpireTag(node: NodeData): NodeDisplayTag | null {
+  if (node.price === 0)
+    return null
+
+  const lang = appStore.lang
+  const days = getDaysUntilExpired(node.expired_at)
+  const status = getExpireStatus(node.expired_at)
+  const color = getExpireBadgeColor(status)
+
+  if (status === 'expired') {
+    return { key: 'expire', text: lang === 'zh-CN' ? '已过期' : 'Expired', color }
+  }
+  if (status === 'long_term') {
+    return { key: 'expire', text: lang === 'zh-CN' ? '长期' : 'Long-term', color }
+  }
+  return { key: 'expire', text: lang === 'zh-CN' ? `剩余 ${days} 天` : `${days} days left`, color }
+}
+
+function getNodeExpireTags(node: NodeData): NodeDisplayTag[] {
+  const tag = getNodeExpireTag(node)
+  return tag ? [tag] : []
+}
+
+/** 名称下方一行：ISP / ASN / 剩余时长 */
+function getNodeNameSublineTags(node: NodeData): NodeDisplayTag[] {
+  return [...getNodeNetworkTags(node), ...getNodeExpireTags(node)]
+}
+
+/** 标签列：价格 / 自定义标签 */
+function getNodeListColumnTags(node: NodeData): NodeDisplayTag[] {
+  const tags: NodeDisplayTag[] = []
+  const lang = appStore.lang
+
+  if (node.price !== 0) {
+    const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
+    tags.push({ key: 'price', text: priceText, color: '#0090FF' })
+  }
+
+  for (const [index, tag] of parseTags(node.tags).entries()) {
+    tags.push({
+      key: `tag-${index}`,
+      text: tag.text,
+      color: tag.hex,
+      title: tag.text,
+    })
   }
 
   return tags
@@ -349,12 +581,12 @@ const columnTitles: Record<string, string> = {
 </script>
 
 <template>
-  <div class="node-list-wrapper">
+  <div class="node-list-table" :style="listTableStyle">
     <NList
       hoverable
       clickable
       bordered
-      class="min-w-fit w-full"
+      class="node-list-table__scroll app-scrollbar min-w-fit w-full"
       :class="[
         { 'light-list-contrast': appStore.lightCardContrast && !appStore.isDark },
         { 'glass-list-enabled': hasBackgroundBlur },
@@ -363,7 +595,7 @@ const columnTitles: Record<string, string> = {
     >
       <template #header>
         <div class="node-list-header" :style="gridStyle">
-          <template v-for="col in columns" :key="col">
+          <template v-for="col in gridColumns" :key="col">
             <div
               :class="`node-list-header__${col}`"
               :style="getColumnStyle(col)"
@@ -371,7 +603,55 @@ const columnTitles: Record<string, string> = {
               @click="handleSort(col)"
             >
               <NText :depth="3" class="text-xs">
-                {{ columnTitles[col] }}{{ sortKey === col ? (sortDir === 1 ? ' ↑' : ' ↓') : '' }}
+                <template v-if="col === 'region'">
+                  <NTooltip>
+                    <template #trigger>
+                      <span>{{ columnTitles[col] }}{{ sortKey === col ? (sortDir === 1 ? ' ↑' : ' ↓') : '' }}</span>
+                    </template>
+                    <div class="text-xs leading-relaxed">
+                      <div v-for="item in regionSummary" :key="item.region" class="flex items-center gap-1 py-0.5">
+                        <img :src="getFlagSrc(item.region)" :alt="getRegionDisplayName(item.region)" class="region-flag">
+                        <span>{{ getRegionDisplayName(item.region) }} {{ item.count }}台</span>
+                      </div>
+                    </div>
+                  </NTooltip>
+                </template>
+                <template v-else>
+                  {{ columnTitles[col] }}{{ sortKey === col ? (sortDir === 1 ? ' ↑' : ' ↓') : '' }}
+                </template>
+                <template v-if="col === 'tags' && monthlyTotalCNY > 0">
+                  <NTooltip>
+                    <template #trigger>
+                      <span class="ml-1 text-[10px] opacity-70">月付 ¥{{ monthlyTotalCNY.toFixed(2) }}</span>
+                    </template>
+                    <div class="text-xs leading-relaxed">
+                      <div>每小时 ¥{{ (monthlyTotalCNY / 30 / 24).toFixed(4) }}</div>
+                      <div>每天 ¥{{ (monthlyTotalCNY / 30).toFixed(2) }}</div>
+                      <div>每年 ¥{{ (monthlyTotalCNY * 12).toFixed(2) }}</div>
+                      <div>本月到期需续费 ¥{{ monthlyRenewalCNY.toFixed(2) }}</div>
+                      <div>下月到期需续费 ¥{{ nextMonthRenewalCNY.toFixed(2) }}</div>
+                    </div>
+                  </NTooltip>
+                </template>
+                <template v-if="col === 'cpu' && totalCpuAll > 0">
+                  <NTooltip>
+                    <template #trigger>
+                      <span class="ml-1 text-[10px] opacity-70">{{ totalCpuUsed.toFixed(1) }}核/{{ totalCpuAll }}核</span>
+                    </template>
+                    <div class="text-xs leading-relaxed whitespace-pre">
+                      {{ cpuModelSummary }}
+                    </div>
+                  </NTooltip>
+                </template>
+                <template v-if="col === 'mem' && totalMemAll > 0">
+                  <span class="ml-1 text-[10px] opacity-70">{{ formatBytes(totalMemUsed) }}/{{ formatBytes(totalMemAll) }}</span>
+                </template>
+                <template v-if="col === 'disk' && totalDiskAll > 0">
+                  <span class="ml-1 text-[10px] opacity-70">{{ formatBytes(totalDiskUsed) }}/{{ formatBytes(totalDiskAll) }}</span>
+                </template>
+                <template v-if="col === 'traffic'">
+                  <span class="ml-1 text-[10px] opacity-70">{{ formatBytes(totalTrafficUsed) }}</span>
+                </template>
               </NText>
             </div>
           </template>
@@ -382,11 +662,10 @@ const columnTitles: Record<string, string> = {
         :key="node.uuid"
         class="node-list-row"
         :class="{ 'node-list-row--offline': !node.online }"
-        :style="rowHeightStyle"
         @click="handleClick(node)"
       >
         <div class="node-list-item" :style="gridStyle">
-          <template v-for="col in columns" :key="col">
+          <template v-for="col in gridColumns" :key="col">
             <!-- 在线状态指示器 -->
             <div v-if="col === 'status'" class="node-list-item__status" :style="getColumnStyle('status')">
               <div class="flex gap-1 items-center">
@@ -416,26 +695,77 @@ const columnTitles: Record<string, string> = {
 
             <!-- 国旗 -->
             <div v-else-if="col === 'region'" class="node-list-item__region" :style="getColumnStyle('region')">
-              <NIcon size="20">
-                <img :src="getFlagSrc(node.region)" :alt="getRegionDisplayName(node.region)" class="rounded-sm">
-              </NIcon>
+              <img
+                :src="getFlagSrc(node.region)"
+                :alt="getRegionDisplayName(node.region)"
+                class="region-flag"
+              >
             </div>
 
-            <!-- 节点名称 -->
+            <!-- 节点名称 + ASN / 厂商 -->
             <div v-else-if="col === 'name'" class="node-list-item__name" :style="getColumnStyle('name')">
-              <NText class="text-sm font-semibold">
+              <NText class="node-list-item__name-text text-sm font-semibold">
                 {{ node.name }}
               </NText>
+              <div
+                v-if="getNodeNameSublineTags(node).length > 0"
+                class="node-list-item__name-tags compact-node-tags node-network-tags"
+              >
+                <template v-if="appStore.listTagsStyle === 'tag'">
+                  <div
+                    v-for="tag in getNodeNameSublineTags(node)"
+                    :key="tag.key"
+                    :class="['network-tag-slot', `network-tag-slot--${tag.key}`]"
+                  >
+                    <NTooltip :disabled="!tag.title">
+                      <template #trigger>
+                        <NTag
+                          class="network-tag"
+                          :color="{ color: `${tag.color}20`, textColor: tag.color, borderColor: `${tag.color}40` }"
+                          size="tiny"
+                        >
+                          <span class="compact-node-tag-icon">
+                            <ProviderBrandIcon
+                              v-if="tag.icon"
+                              :icon="tag.icon"
+                              class="network-tag-svg-icon shrink-0"
+                            />
+                            <span class="compact-node-tag-icon__text">{{ tag.text }}</span>
+                          </span>
+                        </NTag>
+                      </template>
+                      <div class="text-xs leading-relaxed whitespace-pre-line">
+                        {{ tag.title }}
+                      </div>
+                    </NTooltip>
+                  </div>
+                </template>
+                <template v-else>
+                  <div
+                    v-for="tag in getNodeNameSublineTags(node)"
+                    :key="tag.key"
+                    :class="['network-tag-slot', `network-tag-slot--${tag.key}`]"
+                  >
+                    <NTooltip :disabled="!tag.title">
+                      <template #trigger>
+                        <NBadge class="network-tag-badge" :color="tag.color" :value="tag.text" />
+                      </template>
+                      <div class="text-xs leading-relaxed whitespace-pre-line">
+                        {{ tag.title }}
+                      </div>
+                    </NTooltip>
+                  </div>
+                </template>
+              </div>
             </div>
 
-            <!-- 标签 -->
+            <!-- 标签列：价格 / 自定义（标准尺寸，与改紧凑样式前一致） -->
             <div v-else-if="col === 'tags'" class="node-list-item__tags" :style="getColumnStyle('tags')">
-              <div class="flex flex-wrap gap-1 items-center">
-                <!-- 根据 listTagsStyle 配置选择显示方式 -->
+              <div v-if="getNodeListColumnTags(node).length > 0" class="flex flex-wrap gap-1 items-center">
                 <template v-if="appStore.listTagsStyle === 'tag'">
                   <NTag
-                    v-for="(tag, index) in getNodeTags(node)"
-                    :key="index"
+                    v-for="tag in getNodeListColumnTags(node)"
+                    :key="tag.key"
                     :color="{ color: `${tag.color}20`, textColor: tag.color, borderColor: `${tag.color}40` }"
                     size="small"
                   >
@@ -444,8 +774,8 @@ const columnTitles: Record<string, string> = {
                 </template>
                 <template v-else>
                   <NBadge
-                    v-for="(tag, index) in getNodeTags(node)"
-                    :key="index"
+                    v-for="tag in getNodeListColumnTags(node)"
+                    :key="tag.key"
                     :color="tag.color"
                     :value="tag.text"
                   />
@@ -464,10 +794,10 @@ const columnTitles: Record<string, string> = {
             <div v-else-if="col === 'os'" class="node-list-item__os" :style="getColumnStyle('os')">
               <div class="flex gap-1 items-center">
                 <NIcon size="16">
-                  <img :src="getOSImage(node.os)" :alt="getOSName(node.os)">
+                  <img :src="getOSImage(node.os)" :alt="node.os || 'Unknown'">
                 </NIcon>
                 <NText :depth="3" class="text-xs">
-                  {{ getOSName(node.os) }}
+                  {{ node.os || 'Unknown' }}
                 </NText>
               </div>
             </div>
@@ -476,7 +806,7 @@ const columnTitles: Record<string, string> = {
             <div v-else-if="col === 'cpu'" class="node-list-item__cpu" :style="getColumnStyle('cpu')">
               <div class="flex flex-col gap-0.5">
                 <div class="text-[11px] flex gap-1 items-center" :style="{ fontFamily: appStore.numberFontFamily }">
-                  <NText>{{ (node.cpu ?? 0).toFixed(1) }}%</NText>
+                  <NText>{{ (node.cpu ?? 0).toFixed(1) }}% / {{ node.cpu_cores ?? '-' }}核</NText>
                   <div class="flex-1" />
                   <NText :depth="3">
                     {{ node.load.toFixed(2) ?? 0 }}, {{ node.load5.toFixed(2) ?? 0 }}, {{ node.load15.toFixed(2) ?? 0 }}
@@ -562,9 +892,11 @@ const columnTitles: Record<string, string> = {
           <div class="node-offline-overlay__grid" :style="gridStyle">
             <div class="node-offline-overlay__mask" :style="offlineOverlayMaskStyle" />
             <div v-if="offlineOverlayRegionStyle" class="node-offline-overlay__region" :style="offlineOverlayRegionStyle">
-              <NIcon size="18" class="node-offline-overlay__flag shrink-0">
-                <img :src="getFlagSrc(node.region)" :alt="getRegionDisplayName(node.region)" class="rounded-sm">
-              </NIcon>
+              <img
+                :src="getFlagSrc(node.region)"
+                :alt="getRegionDisplayName(node.region)"
+                class="region-flag node-offline-overlay__flag"
+              >
             </div>
             <div class="node-offline-overlay__content" :style="offlineOverlayContentStyle">
               <NText class="node-offline-overlay__name text-sm font-semibold truncate">
@@ -594,30 +926,6 @@ const columnTitles: Record<string, string> = {
 </template>
 
 <style scoped lang="scss">
-.node-list-wrapper {
-  overflow-x: auto;
-  min-width: 0;
-}
-
-:deep(.n-list__header) {
-  padding: 0px !important;
-}
-
-:deep(.n-list-item) {
-  padding: 8px 16px !important;
-}
-
-.node-list-header,
-.node-list-item {
-  display: grid;
-  align-items: center;
-}
-
-.node-list-row {
-  position: relative;
-  overflow: hidden;
-}
-
 .node-offline-overlay {
   position: absolute;
   inset: 0;
@@ -689,31 +997,84 @@ const columnTitles: Record<string, string> = {
   white-space: nowrap;
 }
 
-.node-list-header {
-  padding: 8px 16px;
-  background-color: var(--n-color-hover);
-  border-radius: var(--n-border-radius);
-}
-
-.node-list-header__status,
-.node-list-item__status {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.node-list-header__region,
-.node-list-item__region {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.node-list-header__name,
 .node-list-item__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.node-list-item__name-tags {
+  max-width: 100%;
+}
+
+/* 厂商/ASN：内容多宽标签多宽；仅超出节点列宽时才压缩（厂商优先省略） */
+.node-list-item__name-tags.node-network-tags {
+  flex-flow: row nowrap;
+}
+
+.node-network-tags {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  flex-flow: row nowrap;
+}
+
+.node-network-tags .network-tag-slot {
+  display: inline-flex;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.node-network-tags :deep(.network-tag.n-tag) {
+  width: auto;
+  max-width: 100%;
+}
+
+.node-network-tags :deep(.network-tag-badge) {
+  max-width: 100%;
+}
+
+@media (orientation: landscape) {
+  .node-network-tags {
+    flex-flow: row nowrap;
+  }
+
+  /* 总宽度够：两个标签都不拉长；不够：只压厂商名，ASN 保持自然宽度 */
+  .node-network-tags .network-tag-slot--provider {
+    flex: 0 1 auto;
+    overflow: hidden;
+  }
+
+  .node-network-tags .network-tag-slot--asn,
+  .node-network-tags .network-tag-slot--expire {
+    flex: 0 0 auto;
+  }
+
+  .node-network-tags .network-tag-slot--provider :deep(.network-tag-badge .n-badge-sup) {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
+}
+
+@media (orientation: portrait) {
+  .node-list-item__name-tags.node-network-tags {
+    flex-flow: row nowrap;
+    align-items: center;
+  }
+}
+
+.node-list-header__tags,
+.node-list-item__tags {
+  min-width: 0;
 }
 
 .node-list-header__uptime,
@@ -747,11 +1108,6 @@ const columnTitles: Record<string, string> = {
 
 .node-list-header__rate,
 .node-list-item__rate {
-  min-width: 0;
-}
-
-.node-list-header__tags,
-.node-list-item__tags {
   min-width: 0;
 }
 

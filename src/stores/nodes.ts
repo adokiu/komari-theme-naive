@@ -1,6 +1,7 @@
 import type { Client, NodeStatus } from '@/utils/rpc'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { parseNodeGroups } from '@/utils/groupHelper'
 
 /** 流量限制类型 */
 export type TrafficLimitType = 'up' | 'down' | 'min' | 'max' | 'sum'
@@ -100,14 +101,15 @@ const useNodesStore = defineStore('nodes', () => {
   /** 总节点数量 */
   const totalCount = computed(() => nodes.value.length)
 
-  /** 所有分组 */
+  /** 所有分组（节点 group 字段支持用 ; 分隔多个分类） */
   const groups = computed(() => {
     const groupSet = new Set<string>()
     nodes.value.forEach((n) => {
-      if (n.group)
-        groupSet.add(n.group)
+      for (const g of parseNodeGroups(n.group)) {
+        groupSet.add(g)
+      }
     })
-    return Array.from(groupSet)
+    return Array.from(groupSet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
   })
 
   /** 按 UUID 索引的节点映射 */

@@ -3,17 +3,6 @@ import dayjs from 'dayjs'
 /** 字节单位常量 */
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const
 
-/** 时间单位配置（秒为单位） */
-const TIME_UNITS = [
-  { value: 86400, label: '天' },
-  { value: 3600, label: '小时' },
-  { value: 60, label: '分钟' },
-  { value: 1, label: '秒' },
-] as const
-
-/** 运行时间格式化精度类型 */
-export type UptimeFormat = 'day' | 'hour' | 'minute' | 'second'
-
 /** 字节格式化精度配置 */
 export interface ByteDecimalsConfig {
   /** B 精确位数，-1 为不显示此单位 */
@@ -165,78 +154,29 @@ export function formatBytesPerSecondWithConfig(bytes: number, config?: ByteDecim
 }
 
 /**
- * 格式化运行时间
- * @param seconds 秒数
- * @returns 格式化后的字符串，如 "2 天 3 小时 15 分钟"
+ * 运行时间：始终两个相邻单位（≥1 天 → 天+小时；≥1 小时 → 小时+分；否则 → 分+秒）
  */
-export function formatUptime(seconds: number): string {
-  if (!seconds || seconds <= 0)
-    return '0 秒'
+function formatUptimeTwoUnits(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds))
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
 
-  const parts: string[] = []
-  let remaining = seconds
-
-  for (const { value, label } of TIME_UNITS) {
-    const amount = Math.floor(remaining / value)
-    if (amount > 0) {
-      parts.push(`${amount} ${label}`)
-      remaining %= value
-    }
-  }
-
-  return parts.length > 0 ? parts.join(' ') : '0 秒'
+  if (days > 0)
+    return `${days}天${hours}小时`
+  if (hours > 0)
+    return `${hours}小时${minutes}分`
+  return `${minutes}分${secs}秒`
 }
 
 /**
- * 格式化运行时间（支持自定义精度）
+ * 格式化运行时间
  * @param seconds 秒数
- * @param format 精度格式：'day' | 'hour' | 'minute' | 'second'
- * - 'day': 只显示天（如 "2 天"），不满一天时显示"不足 1 天"
- * - 'hour': 显示天和小时（如 "2 天 3 小时"），不满一小时时显示"不足 1 小时"
- * - 'minute': 显示天、小时、分钟（如 "2 天 3 小时 15 分钟"），不满一分钟时显示"不足 1 分钟"
- * - 'second': 显示天、小时、分钟、秒（如 "2 天 3 小时 15 分钟 30 秒"）
- * @returns 格式化后的字符串
+ * @returns 如 "2天3小时"、"5小时30分"、"0分45秒"
  */
-export function formatUptimeWithFormat(seconds: number, format: UptimeFormat = 'day'): string {
-  if (!seconds || seconds <= 0)
-    return '0 秒'
-
-  // 根据格式确定最大单位索引（从天开始）
-  const formatMaxUnitIndexMap: Record<UptimeFormat, number> = {
-    day: 0, // 只到天
-    hour: 1, // 到小时
-    minute: 2, // 到分钟
-    second: 3, // 到秒
-  }
-
-  const maxUnitIndex = formatMaxUnitIndexMap[format]
-  const parts: string[] = []
-  let remaining = seconds
-
-  for (let i = 0; i < TIME_UNITS.length; i++) {
-    const unit = TIME_UNITS[i]
-    if (!unit)
-      continue
-    const { value, label } = unit
-    const amount = Math.floor(remaining / value)
-    if (amount > 0) {
-      parts.push(`${amount} ${label}`)
-      remaining %= value
-    }
-    // 达到最大单位索引时停止
-    if (i >= maxUnitIndex) {
-      break
-    }
-  }
-
-  // 如果没有任何单位有值，显示"不足 1 X"
-  if (parts.length === 0) {
-    const fallbackUnit = TIME_UNITS[maxUnitIndex]
-    const fallbackLabel = fallbackUnit?.label ?? '秒'
-    return `不足 1 ${fallbackLabel}`
-  }
-
-  return parts.join(' ')
+export function formatUptime(seconds: number): string {
+  return formatUptimeTwoUnits(seconds)
 }
 
 /**
